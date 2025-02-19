@@ -6,7 +6,7 @@ import requests_cache
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
-from constants import BASE_DIR, MAIN_DOC_URL
+from constants import BASE_DIR, MAIN_DOC_URL, PEP_LIST_URL
 from configs import configure_argument_parser, configure_logging
 from outputs import control_output
 from utils import get_response, find_tag
@@ -97,7 +97,6 @@ def latest_versions(session):
 
 
 def download(session):
-    # Вместо константы DOWNLOADS_URL, используйте переменную downloads_url.
     downloads_url = urljoin(MAIN_DOC_URL, 'download.html')
     response = get_response(session, downloads_url)
     if response is None:
@@ -115,11 +114,8 @@ def download(session):
     archive_url = urljoin(downloads_url, pdf_a4_link)
 
     filename = archive_url.split('/')[-1]
-    # Сформируйте путь до директории downloads.
     downloads_dir = BASE_DIR / 'downloads'
-    # Создайте директорию.
     downloads_dir.mkdir(exist_ok=True)
-    # Получите путь до архива, объединив имя файла с директорией.
     archive_path = downloads_dir / filename
 
     response = session.get(archive_url)
@@ -130,10 +126,30 @@ def download(session):
     logging.info(f'Архив был загружен и сохранён: {archive_path}')
 
 
+def pep(session):
+    pep_url = PEP_LIST_URL
+    response = get_response(session, pep_url)
+    soup = BeautifulSoup(response.text, features='lxml')
+    section_id = find_tag(soup, 'section', attrs={'id': 'index-by-category'})
+    rows = section_id.find_all('tr')
+    for row in rows:
+        if not row.find('td'):
+            continue
+
+        abbr_td = find_tag(row, 'td')
+        abbr = find_tag(abbr_td, 'abbr')
+        print(abbr['title'])
+    if response is None:
+        # Если основная страница не загрузится, программа закончит работу.
+        return
+    pass
+
+
 MODE_TO_FUNCTION = {
     'whats-new': whats_new,
     'latest-versions': latest_versions,
     'download': download,
+    'pep': pep
 }
 
 
