@@ -6,7 +6,7 @@ import requests_cache
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
-from constants import BASE_DIR, MAIN_DOC_URL, PEP_LIST_URL
+from constants import BASE_DIR, MAIN_DOC_URL, PEP_LIST_URL, EXPECTED_STATUS
 from configs import configure_argument_parser, configure_logging
 from outputs import control_output
 from utils import get_response, find_tag
@@ -127,22 +127,44 @@ def download(session):
 
 
 def pep(session):
-    pep_url = PEP_LIST_URL
-    response = get_response(session, pep_url)
+    pep_list_url = PEP_LIST_URL
+    response = get_response(session, pep_list_url)
+    if response is None:
+        return
     soup = BeautifulSoup(response.text, features='lxml')
     section_id = find_tag(soup, 'section', attrs={'id': 'index-by-category'})
     rows = section_id.find_all('tr')
-    for row in rows:
+
+    results_table = []
+    for row in tqdm(rows):
         if not row.find('td'):
             continue
-
+        version_pep_tag = find_tag(row, 'a')
+        href = version_pep_tag['href']
+        pep_item_url = urljoin(PEP_LIST_URL, href)
         abbr_td = find_tag(row, 'td')
         abbr = find_tag(abbr_td, 'abbr')
-        print(abbr['title'])
-    if response is None:
-        # Если основная страница не загрузится, программа закончит работу.
-        return
-    pass
+        types_and_status_list = abbr.text
+        status_symbol = (
+            types_and_status_list[1]
+            if len(types_and_status_list) > 1
+            else ''
+        )
+        status_value = EXPECTED_STATUS.get(status_symbol, ('Unknown'))
+        response = get_response(session, pep_item_url)
+        if response is None:
+            return
+        soup = BeautifulSoup(response.text, features='lxml')
+
+        for dt in soup.find_all('dt'):
+            if dt.text.strip() == 'Status:':
+                status_on_link = dt.find_next_sibling('dd').text
+                # print(dt.find_next_sibling('dd').text)
+                if any(status == status_on_link for status in status_value):
+                    # print(f'Совпадение найдено: {status_on_link}')
+                    continue
+                else:
+                    print(f'Статус {status_on_link} не найден в {status_value}')
 
 
 MODE_TO_FUNCTION = {

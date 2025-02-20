@@ -26,3 +26,10 @@ def find_tag(soup, tag, attrs=None):
         logging.error(error_msg, stack_info=True)
         raise ParserFindTagException(error_msg)
     return searched_tag
+
+
+# Перехват несовпадения статуса документации.
+def check_status_pep(data_1, data_2):
+    if data_1 != data_2:
+        return False
+    return True
