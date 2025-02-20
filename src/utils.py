@@ -26,3 +26,16 @@ def find_tag(soup, tag, attrs=None):
         logging.error(error_msg, stack_info=True)
         raise ParserFindTagException(error_msg)
     return searched_tag
+
+
+# Перехват несовпадения статуса документации.
+def check_status_matches(data_page, data_table, url):
+    if data_page not in data_table:
+        logging.warning(
+            'Несовпадающие статусы:\n'
+            f'URL: {url}\n'
+            f'Статус в карточке: {data_page}\n'
+            f'Ожидаемые статусы: {data_table}\n'
+        )
+        return False
+    return data_page

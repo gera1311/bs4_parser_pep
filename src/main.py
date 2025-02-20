@@ -5,20 +5,20 @@ import logging
 import requests_cache
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from collections import Counter
 
-from constants import BASE_DIR, MAIN_DOC_URL
+from constants import (BASE_DIR, MAIN_DOC_URL,
+                       PEP_LIST_URL, EXPECTED_STATUS, UNKNOWN_VALUE)
 from configs import configure_argument_parser, configure_logging
 from outputs import control_output
-from utils import get_response, find_tag
+from utils import get_response, find_tag, check_status_matches
 
 
 def whats_new(session):
-    # Вместо константы WHATS_NEW_URL, используйте переменную whats_new_url.
     whats_new_url = urljoin(MAIN_DOC_URL, 'whatsnew/')
     # Загрузка веб-страницы с кешированием.
     response = get_response(session, whats_new_url)
     if response is None:
-        # Если основная страница не загрузится, программа закончит работу.
         return
 
     soup = BeautifulSoup(response.text, features='lxml')
@@ -97,7 +97,6 @@ def latest_versions(session):
 
 
 def download(session):
-    # Вместо константы DOWNLOADS_URL, используйте переменную downloads_url.
     downloads_url = urljoin(MAIN_DOC_URL, 'download.html')
     response = get_response(session, downloads_url)
     if response is None:
@@ -115,11 +114,8 @@ def download(session):
     archive_url = urljoin(downloads_url, pdf_a4_link)
 
     filename = archive_url.split('/')[-1]
-    # Сформируйте путь до директории downloads.
     downloads_dir = BASE_DIR / 'downloads'
-    # Создайте директорию.
     downloads_dir.mkdir(exist_ok=True)
-    # Получите путь до архива, объединив имя файла с директорией.
     archive_path = downloads_dir / filename
 
     response = session.get(archive_url)
@@ -130,10 +126,67 @@ def download(session):
     logging.info(f'Архив был загружен и сохранён: {archive_path}')
 
 
+def pep(session):
+    pep_list_url = PEP_LIST_URL
+
+    # Загрузка списка документации (с кешированием).
+    response = get_response(session, pep_list_url)
+    if response is None:
+        return
+
+    # Ищем табличные строки.
+    soup = BeautifulSoup(response.text, features='lxml')
+    section_id = find_tag(soup, 'section', attrs={'id': 'index-by-category'})
+    rows = section_id.find_all('tr')
+
+    # Переменная и счётчик для необходимой информации (статус, количество)
+    results = [('Статус', 'Количество')]
+    status_counter = Counter()
+
+    # Поиск по строкам таблицы необходимых статусов.
+    for row in tqdm(rows):
+        if not row.find('td'):
+            continue
+        version_pep_tag = find_tag(row, 'a')
+        href = version_pep_tag['href']
+        pep_item_url = urljoin(PEP_LIST_URL, href)
+        abbr_td = find_tag(row, 'td')
+        abbr = find_tag(abbr_td, 'abbr')
+        types_and_status_list = abbr.text
+        status_symbol = (
+            types_and_status_list[1]
+            if len(types_and_status_list) > 1
+            else ''
+        )
+        status_value = EXPECTED_STATUS.get(status_symbol, (UNKNOWN_VALUE))
+
+        # Загрузка карточки (с кешированием)
+        response = get_response(session, pep_item_url)
+        if response is None:
+            return
+
+        # Суп из карточки, поиск статусов и сравнение с таблицей.
+        soup = BeautifulSoup(response.text, features='lxml')
+        for dt in soup.find_all('dt'):
+            if re.search(r'^\s*Status\s*:\s*$', dt.text, re.IGNORECASE):
+                status_on_link = dt.find_next_sibling('dd').text
+                status_confirmed = check_status_matches(
+                    status_on_link, status_value, pep_item_url)
+                if status_confirmed:
+                    status_counter[status_confirmed] += 1
+
+    # Запись полученных данных
+    results += ([[status, count] for status, count in status_counter.items()])
+    results.append(['Total', sum(status_counter.values())])
+
+    return results
+
+
 MODE_TO_FUNCTION = {
     'whats-new': whats_new,
     'latest-versions': latest_versions,
     'download': download,
+    'pep': pep
 }
 
 

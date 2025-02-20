@@ -62,5 +62,5 @@ def file_output(results, cli_args):
         writer = csv.writer(f, dialect='unix')
         # Передаём в метод writerows список с результатами парсинга.
         writer.writerows(results)
-    
-    logging.info(f'Файл с результатами был сохранён: {file_path}') 
+
+    logging.info(f'Файл с результатами был сохранён: {file_path}')
