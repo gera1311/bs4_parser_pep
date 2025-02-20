@@ -15,3 +15,5 @@ EXPECTED_STATUS = {
 }
 
 PEP_LIST_URL = 'https://peps.python.org/'
+
+UNKNOWN_VALUE = 'Unknown'

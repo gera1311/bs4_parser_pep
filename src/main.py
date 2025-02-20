@@ -7,19 +7,18 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 from collections import Counter
 
-from constants import BASE_DIR, MAIN_DOC_URL, PEP_LIST_URL, EXPECTED_STATUS
+from constants import (BASE_DIR, MAIN_DOC_URL,
+                       PEP_LIST_URL, EXPECTED_STATUS, UNKNOWN_VALUE)
 from configs import configure_argument_parser, configure_logging
 from outputs import control_output
 from utils import get_response, find_tag, check_status_matches
 
 
 def whats_new(session):
-    # Вместо константы WHATS_NEW_URL, используйте переменную whats_new_url.
     whats_new_url = urljoin(MAIN_DOC_URL, 'whatsnew/')
     # Загрузка веб-страницы с кешированием.
     response = get_response(session, whats_new_url)
     if response is None:
-        # Если основная страница не загрузится, программа закончит работу.
         return
 
     soup = BeautifulSoup(response.text, features='lxml')
@@ -129,15 +128,22 @@ def download(session):
 
 def pep(session):
     pep_list_url = PEP_LIST_URL
+
+    # Загрузка списка документации (с кешированием).
     response = get_response(session, pep_list_url)
     if response is None:
         return
+
+    # Ищем табличные строки.
     soup = BeautifulSoup(response.text, features='lxml')
     section_id = find_tag(soup, 'section', attrs={'id': 'index-by-category'})
     rows = section_id.find_all('tr')
 
+    # Переменная и счётчик для необходимой информации (статус, количество)
     results = [('Статус', 'Количество')]
     status_counter = Counter()
+
+    # Поиск по строкам таблицы необходимых статусов.
     for row in tqdm(rows):
         if not row.find('td'):
             continue
@@ -152,20 +158,24 @@ def pep(session):
             if len(types_and_status_list) > 1
             else ''
         )
-        status_value = EXPECTED_STATUS.get(status_symbol, ('Unknown'))
+        status_value = EXPECTED_STATUS.get(status_symbol, (UNKNOWN_VALUE))
+
+        # Загрузка карточки (с кешированием)
         response = get_response(session, pep_item_url)
         if response is None:
             return
-        soup = BeautifulSoup(response.text, features='lxml')
 
+        # Суп из карточки, поиск статусов и сравнение с таблицей.
+        soup = BeautifulSoup(response.text, features='lxml')
         for dt in soup.find_all('dt'):
-            if dt.text.strip() == 'Status:':
+            if re.search(r'^\s*Status\s*:\s*$', dt.text, re.IGNORECASE):
                 status_on_link = dt.find_next_sibling('dd').text
                 status_confirmed = check_status_matches(
                     status_on_link, status_value, pep_item_url)
                 if status_confirmed:
                     status_counter[status_confirmed] += 1
 
+    # Запись полученных данных
     results += ([[status, count] for status, count in status_counter.items()])
     results.append(['Total', sum(status_counter.values())])
 
