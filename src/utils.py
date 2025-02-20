@@ -29,7 +29,13 @@ def find_tag(soup, tag, attrs=None):
 
 
 # Перехват несовпадения статуса документации.
-def check_status_pep(data_1, data_2):
-    if data_1 != data_2:
+def check_status_matches(data_page, data_table, url):
+    if data_page not in data_table:
+        logging.warning(
+            'Несовпадающие статусы:\n'
+            f'URL: {url}\n'
+            f'Статус в карточке: {data_page}\n'
+            f'Ожидаемые статусы: {data_table}\n'
+        )
         return False
-    return True
+    return data_page

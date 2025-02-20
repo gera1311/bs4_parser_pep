@@ -5,11 +5,12 @@ import logging
 import requests_cache
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from collections import Counter
 
 from constants import BASE_DIR, MAIN_DOC_URL, PEP_LIST_URL, EXPECTED_STATUS
 from configs import configure_argument_parser, configure_logging
 from outputs import control_output
-from utils import get_response, find_tag
+from utils import get_response, find_tag, check_status_matches
 
 
 def whats_new(session):
@@ -135,7 +136,8 @@ def pep(session):
     section_id = find_tag(soup, 'section', attrs={'id': 'index-by-category'})
     rows = section_id.find_all('tr')
 
-    results_table = []
+    results = [('Статус', 'Количество')]
+    status_counter = Counter()
     for row in tqdm(rows):
         if not row.find('td'):
             continue
@@ -159,12 +161,15 @@ def pep(session):
         for dt in soup.find_all('dt'):
             if dt.text.strip() == 'Status:':
                 status_on_link = dt.find_next_sibling('dd').text
-                # print(dt.find_next_sibling('dd').text)
-                if any(status == status_on_link for status in status_value):
-                    # print(f'Совпадение найдено: {status_on_link}')
-                    continue
-                else:
-                    print(f'Статус {status_on_link} не найден в {status_value}')
+                status_confirmed = check_status_matches(
+                    status_on_link, status_value, pep_item_url)
+                if status_confirmed:
+                    status_counter[status_confirmed] += 1
+
+    results += ([[status, count] for status, count in status_counter.items()])
+    results.append(['Total', sum(status_counter.values())])
+
+    return results
 
 
 MODE_TO_FUNCTION = {
