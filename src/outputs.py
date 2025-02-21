@@ -4,7 +4,7 @@ import logging
 
 from prettytable import PrettyTable
 
-from constants import BASE_DIR, DATETIME_FORMAT, PRETTY, FILE
+from constants import BASE_DIR, DATETIME_FORMAT, FILE, PRETTY, RESULTS_PATH
 
 
 def control_output(results, cli_args):
@@ -20,12 +20,13 @@ def control_output(results, cli_args):
     output_handlers = {
         PRETTY: pretty_output,
         FILE: file_output,
+        None: default_output,
     }
     handler = output_handlers.get(output, default_output)
-    handler(results, cli_args) if output == FILE else handler(results)
+    handler(results, cli_args)
 
 
-def default_output(results):
+def default_output(results, *args):
     """
     Печатает список results построчно.
     """
@@ -33,7 +34,7 @@ def default_output(results):
         print(*row)
 
 
-def pretty_output(results):
+def pretty_output(results, *args):
     """
     Выводит результаты в виде таблицы с помощью PrettyTable.
 
@@ -58,19 +59,15 @@ def file_output(results, cli_args):
     - Создает папку 'results', если её нет.
     - Записывает логи о сохранении файла.
     """
-    # Тесты не проходят, если при объявлении RESULTS_DIR
-    # отсутствует переменная BASE_DIR
-    # Прекод в этом уроке (это не самостоятельная работа)
-    # Ссылка на урок: [Спринт 19/27 →
-    # Тема 5/7: Вывод и хранение результатов парсинга → Урок 2/2]
-    RESULTS_DIR = BASE_DIR / 'results'
-    RESULTS_DIR.mkdir(exist_ok=True)
+
+    results_dir = BASE_DIR / RESULTS_PATH
+    results_dir.mkdir(exist_ok=True)
 
     parser_mode = cli_args.mode
     now = dt.datetime.now()
     now_formatted = now.strftime(DATETIME_FORMAT)
     file_name = f'{parser_mode}_{now_formatted}.csv'
-    file_path = RESULTS_DIR / file_name
+    file_path = results_dir / file_name
     with open(file_path, 'w', encoding='utf-8') as f:
         writer = csv.writer(f, dialect='unix')
         writer.writerows(results)

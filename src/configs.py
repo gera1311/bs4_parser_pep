@@ -2,7 +2,7 @@ import argparse
 import logging
 from logging.handlers import RotatingFileHandler
 
-from constants import DT_FORMAT, LOG_FORMAT, FILE, PRETTY, LOG_DIR, LOG_FILE
+from constants import DT_FORMAT, FILE, LOG_DIR, LOG_FILE, LOG_FORMAT, PRETTY
 
 
 def configure_argument_parser(available_modes):
@@ -38,12 +38,9 @@ def configure_logging():
     rotating_handler = RotatingFileHandler(
         LOG_FILE, maxBytes=10 ** 6, backupCount=5, encoding='utf-8'
     )
-    # Базовая настройка логирования basicConfig.
     logging.basicConfig(
         datefmt=DT_FORMAT,
         format=LOG_FORMAT,
-        # Уровень записи логов.
         level=logging.INFO,
-        # Вывод логов в терминал.
         handlers=(rotating_handler, logging.StreamHandler())
     )

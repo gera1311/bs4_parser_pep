@@ -7,11 +7,11 @@ import requests_cache
 from tqdm import tqdm
 
 from configs import configure_argument_parser, configure_logging
-from constants import (BASE_DIR, MAIN_DOC_URL,
-                       PEP_LIST_URL, EXPECTED_STATUS, UNKNOWN_VALUE)
-from outputs import control_output
-from utils import get_response, find_tag, check_status_matches, cook_soup
+from constants import (BASE_DIR, EXPECTED_STATUS,
+                       MAIN_DOC_URL, PEP_LIST_URL, UNKNOWN_VALUE)
 from exceptions import ParserMainError, VersionsNotFoundException
+from outputs import control_output
+from utils import check_status_matches, cook_soup, find_tag
 
 
 def whats_new(session):
@@ -35,11 +35,8 @@ def whats_new(session):
       ('Ссылка на статью', 'Заголовок', 'Редактор, автор').
     """
     whats_new_url = urljoin(MAIN_DOC_URL, 'whatsnew/')
-    response = get_response(session, whats_new_url)
-    if response is None:
-        return
 
-    soup = cook_soup(response)
+    soup = cook_soup(session, whats_new_url)
 
     main_div = find_tag(soup, 'section', attrs={'id': 'what-s-new-in-python'})
     div_with_ul = find_tag(main_div, 'div', attrs={'class': 'toctree-wrapper'})
@@ -48,21 +45,22 @@ def whats_new(session):
 
     results = [('Ссылка на статью', 'Заголовок',
                 'Редактор, автор')]
+    error_messages = []
     for section in tqdm(sections_by_python):
         version_a_tag = section.find('a')
 
         href = version_a_tag['href']
         version_link = urljoin(whats_new_url, href)
 
-        response = get_response(session, version_link)
-        if response is None:
-            logging.warning(
-                f'Не удалось загрузить страницу {version_link}.'
-                f'Итерация пропущена.'
+        try:
+            soup = cook_soup(session, version_link)
+        except ConnectionError as error:
+            error_messages.append(
+                f'Ошибка при загрузке {version_link}: {error}'
             )
             continue
-
-        soup = cook_soup(response)
+    if error_messages:
+        logging.warning("\n".join(error_messages))
 
         h1 = find_tag(soup, 'h1')
         dl = find_tag(soup, 'dl')
@@ -87,11 +85,7 @@ def latest_versions(session):
     Исключения:
     - VersionsNotFoundException: Если список версий не найден на странице.
     """
-    response = get_response(session, MAIN_DOC_URL)
-    if response is None:
-        return
-
-    soup = cook_soup(response)
+    soup = cook_soup(session, MAIN_DOC_URL)
 
     ul_tags = soup.find_all('ul')
 
@@ -133,10 +127,8 @@ def download(session):
     - None
     """
     downloads_url = urljoin(MAIN_DOC_URL, 'download.html')
-    response = get_response(session, downloads_url)
-    if response is None:
-        return
-    soup = cook_soup(response)
+
+    soup = cook_soup(session, downloads_url)
 
     main_tag = find_tag(soup, 'div', {'role': 'main'})
     table_tag = find_tag(main_tag, 'table', {'class': 'docutils'})
@@ -185,21 +177,13 @@ def pep(session):
     """
     pep_list_url = PEP_LIST_URL
 
-    # Загрузка списка документации (с кешированием).
-    response = get_response(session, pep_list_url)
-    if response is None:
-        return
-
-    # Ищем табличные строки.
-    soup = cook_soup(response)
+    soup = cook_soup(session, pep_list_url)
     section_id = find_tag(soup, 'section', attrs={'id': 'index-by-category'})
     rows = section_id.find_all('tr')
 
-    # Переменная и счётчик для необходимой информации (статус, количество)
     results = [('Статус', 'Количество')]
     status_counter = Counter()
 
-    # Поиск по строкам таблицы необходимых статусов.
     for row in tqdm(rows):
         if not row.find('td'):
             continue
@@ -216,13 +200,16 @@ def pep(session):
         )
         status_value = EXPECTED_STATUS.get(status_symbol, (UNKNOWN_VALUE))
 
-        # Загрузка карточки (с кешированием)
-        response = get_response(session, pep_item_url)
-        if response is None:
-            return
+        error_messages = []
+        try:
+            soup = cook_soup(session, pep_item_url)
+        except ConnectionError as e:
+            error_messages.append(f"Ошибка при загрузке {pep_item_url}: {e}")
+            continue
 
-        # Суп из карточки, поиск статусов и сравнение с таблицей.
-        soup = cook_soup(response)
+    if error_messages:
+        logging.warning("\n".join(error_messages))
+
         for dt in soup.find_all('dt'):
             if re.search(r'^\s*Status\s*:\s*$', dt.text, re.IGNORECASE):
                 status_on_link = dt.find_next_sibling('dd').text
@@ -231,7 +218,6 @@ def pep(session):
                 if status_confirmed:
                     status_counter[status_confirmed] += 1
 
-    # Запись полученных данных
     results.extend(map(list, status_counter.items()))
     results.append(['Total', sum(status_counter.values())])
 
@@ -257,25 +243,16 @@ def main():
     configure_logging()
     logging.info('Парсер запущен!')
     try:
-        # Конфигурация парсера аргументов командной строки —
-        # передача в функцию допустимых вариантов выбора.
         arg_parser = configure_argument_parser(MODE_TO_FUNCTION.keys())
-        # Считывание аргументов из командной строки.
         args = arg_parser.parse_args()
 
-        # Логируем переданные аргументы командной строки.
         logging.info(f'Аргументы командной строки: {args}')
 
-        # Создание кеширующей сессии.
         session = requests_cache.CachedSession()
-        # Если был передан ключ '--clear-cache', то args.clear_cache == True.
         if args.clear_cache:
-            # Очистка кеша.
             session.cache.clear()
 
-        # Получение из аргументов командной строки нужного режима работы.
         parser_mode = args.mode
-        # Поиск и вызов нужной функции по ключу словаря.
         results = MODE_TO_FUNCTION[parser_mode](session)
         if results is not None:
             control_output(results, args)
@@ -284,7 +261,6 @@ def main():
             f'Во время работы программы произошло исключение: {error}'
         )
         raise ParserMainError('Ошибка выполнения работы парсера.') from error
-    # Логируем завершение работы парсера.
     logging.info('Парсер завершил работу.')
 
 

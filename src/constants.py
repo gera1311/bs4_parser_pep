@@ -24,7 +24,7 @@ DT_FORMAT = '%d.%m.%Y %H:%M:%S'
 BASE_DIR = Path(__file__).parent
 LOG_DIR = BASE_DIR / 'logs'
 LOG_FILE = LOG_DIR / 'parser.log'
-RESULTS_DIR = BASE_DIR / 'results'
+RESULTS_PATH = 'results'
 
 FILE = 'file'
 PRETTY = 'pretty'

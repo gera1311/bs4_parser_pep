@@ -1,7 +1,7 @@
+import requests
 import logging
 
 from bs4 import BeautifulSoup
-from requests import RequestException
 
 from exceptions import ParserFindTagException
 
@@ -19,14 +19,15 @@ def get_response(session, url, encoding='utf-8'):
     - объект response при успешном запросе.
 
     Исключения:
-    - RequestException при сбое запроса.
+    - ConnectionError при сбое запроса.
     """
     try:
         response = session.get(url)
         response.encoding = encoding
         return response
-    except RequestException as e:
-        raise RuntimeError(f"Ошибка при загрузке {url}: {e}") from e
+    except requests.exceptions.ConnectionError as e:
+        logging.warning(f"Ошибка соединения при запросе {url}: {e}")
+        raise ConnectionError(f"Ошибка соединения при запросе {url}") from e
 
 
 def find_tag(soup, tag, attrs=None):
@@ -78,17 +79,18 @@ def check_status_matches(data_page, data_table, url):
     return data_page
 
 
-def cook_soup(response, features='lxml'):
+def cook_soup(session, url, features='lxml'):
     """
-    Преобразует HTML-ответ в объект BeautifulSoup.
+    Выполняет HTTP-запрос и преобразует HTML-ответ в объект BeautifulSoup.
 
-    Параметр:
-    - response (request.Response): HTTP-ответ с HTML-контентом.
+    Параметры:
+    - session (requests.Session): Сессия для выполнения запроса.
+    - url (str): URL страницы для запроса.
     - features (str): Парсер, который будет использовать BeautifulSoup.
       По умолчанию используется 'lxml' для быстрой обработки HTML.
 
     Возвращает:
-    - soup (BeatifulSoup): Объект BeautifulSoup для парсинга HTML.
+    - soup (BeautifulSoup): Объект BeautifulSoup для парсинга HTML.
     """
-    soup = BeautifulSoup(response.text, features)
-    return soup
+    response = get_response(session, url)
+    return BeautifulSoup(response.text, features)
