@@ -1,66 +1,78 @@
-import datetime as dt
 import csv
+import datetime as dt
 import logging
 
 from prettytable import PrettyTable
 
-from constants import BASE_DIR, DATETIME_FORMAT
+from constants import BASE_DIR, DATETIME_FORMAT, PRETTY, FILE
 
 
 def control_output(results, cli_args):
+    """
+    Обрабатывает и выводит результаты в заданном формате.
+
+    Формат вывода определяется аргументом cli_args.output:
+    - PRETTY: красивый вывод с помощью PrettyTable.
+    - FILE: сохранение результатов в файл.
+    - По умолчанию: стандартный построчный вывод.
+    """
     output = cli_args.output
-    if output == 'pretty':
-        # Вывод в формате PrettyTable.
-        pretty_output(results)
-    elif output == 'file':
-        file_output(results, cli_args)
-    else:
-        # Вывод по умолчанию.
-        default_output(results)
+    output_handlers = {
+        PRETTY: pretty_output,
+        FILE: file_output,
+    }
+    handler = output_handlers.get(output, default_output)
+    handler(results, cli_args) if output == FILE else handler(results)
 
 
 def default_output(results):
-    # Печатаем список results построчно.
+    """
+    Печатает список results построчно.
+    """
     for row in results:
         print(*row)
 
 
 def pretty_output(results):
-    # Инициализируем объект PrettyTable.
+    """
+    Выводит результаты в виде таблицы с помощью PrettyTable.
+
+    Первая строка results используется как заголовки столбцов.
+    Остальные строки добавляются в таблицу как данные.
+    """
     table = PrettyTable()
-    # В качестве заголовков устанавливаем первый элемент списка.
     table.field_names = results[0]
-    # Выравниваем всю таблицу по левому краю.
     table.align = 'l'
-    # Добавляем все строки, начиная со второй (с индексом 1).
     table.add_rows(results[1:])
-    # Печатаем таблицу.
     print(table)
 
 
 def file_output(results, cli_args):
-    results_dir = BASE_DIR / 'results'
-    results_dir.mkdir(exist_ok=True)
+    """
+    Сохраняет результаты в CSV-файл в папке 'results'.
 
-    # Получаем режим работы парсера из аргументов командной строки.
+    - results: данные для сохранения.
+    - cli_args: аргументы командной строки, содержащие режим работы.
+
+    Логи:
+    - Создает папку 'results', если её нет.
+    - Записывает логи о сохранении файла.
+    """
+    # Тесты не проходят, если при объявлении RESULTS_DIR
+    # отсутствует переменная BASE_DIR
+    # Прекод в этом уроке (это не самостоятельная работа)
+    # Ссылка на урок: [Спринт 19/27 →
+    # Тема 5/7: Вывод и хранение результатов парсинга → Урок 2/2]
+    RESULTS_DIR = BASE_DIR / 'results'
+    RESULTS_DIR.mkdir(exist_ok=True)
+
     parser_mode = cli_args.mode
-    # Получаем текущие дату и время.
     now = dt.datetime.now()
-    # Сохраняем текущие дату-время в указанном формате.
-    # Результат будет выглядеть вот так: 2021-06-18_07-40-41.
     now_formatted = now.strftime(DATETIME_FORMAT)
-    # Собираем имя файла из полученных переменных:
-    # «режим работы программы» + «дата и время записи» + формат (.csv).
     file_name = f'{parser_mode}_{now_formatted}.csv'
-    # Получаем абсолютный путь к файлу с результатами.
-    file_path = results_dir / file_name
-
-    # Через контекстный менеджер открываем файл по сформированному ранее пути
-    # в режиме записи 'w', в нужной кодировке utf-8.
+    file_path = RESULTS_DIR / file_name
     with open(file_path, 'w', encoding='utf-8') as f:
-        # Создаём «объект записи» writer.
         writer = csv.writer(f, dialect='unix')
-        # Передаём в метод writerows список с результатами парсинга.
         writer.writerows(results)
 
     logging.info(f'Файл с результатами был сохранён: {file_path}')
