@@ -26,7 +26,6 @@ def get_response(session, url, encoding='utf-8'):
         response.encoding = encoding
         return response
     except requests.exceptions.ConnectionError as e:
-        logging.warning(f"Ошибка соединения при запросе {url}: {e}")
         raise ConnectionError(f"Ошибка соединения при запросе {url}") from e
 
 
